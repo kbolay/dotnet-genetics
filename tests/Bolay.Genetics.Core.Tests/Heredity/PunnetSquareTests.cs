@@ -1,8 +1,8 @@
 using Bolay.Genetics.Core.Models;
-using Bolay.Genetics.Core.PunnetSquares;
+using Bolay.Genetics.Core.Heredity;
 using Xunit;
 
-namespace Bolay.Genetics.Core.Tests.PunnetSquares
+namespace Bolay.Genetics.Core.Tests.Heredity
 {
     public class PunnetSquareTests
     {
@@ -15,11 +15,11 @@ namespace Bolay.Genetics.Core.Tests.PunnetSquares
             _secondAllele
         };
 
-        private PunnetSquare<TestLocus> _punnetSquare;
+        private PunnetSquare<TestLocus, Guid> _punnetSquare;
 
         public PunnetSquareTests()
         {
-            _punnetSquare = new PunnetSquare<TestLocus>();
+            _punnetSquare = new PunnetSquare<TestLocus, Guid>();
         } // end method
 
         [Fact]
@@ -34,8 +34,8 @@ namespace Bolay.Genetics.Core.Tests.PunnetSquares
             Assert.Equal(1, results.Count());
             var firstResult = results.First();
             Assert.Equal(1, firstResult.Ratio);
-            Assert.Equal(_firstAllele, firstResult.Pair.DominantAllele);
-            Assert.Equal(_firstAllele, firstResult.Pair.OtherAllele);
+            Assert.Equal(_firstAllele, firstResult.Genotype.DominantAllele);
+            Assert.Equal(_firstAllele, firstResult.Genotype.OtherAllele);
         } // end method
 
         [Fact]
@@ -50,18 +50,18 @@ namespace Bolay.Genetics.Core.Tests.PunnetSquares
             Assert.Equal(3, results.Count());
             var firstResult = results.First();
             Assert.Equal((float)4/(float)9, firstResult.Ratio);
-            Assert.Equal(_firstAllele, firstResult.Pair.DominantAllele);
-            Assert.Equal(_firstAllele, firstResult.Pair.OtherAllele);
+            Assert.Equal(_firstAllele, firstResult.Genotype.DominantAllele);
+            Assert.Equal(_firstAllele, firstResult.Genotype.OtherAllele);
 
             var secondResult = results.ElementAt(1);
             Assert.Equal((float)4/(float)9, secondResult.Ratio);
-            Assert.Equal(_firstAllele, secondResult.Pair.DominantAllele);
-            Assert.Equal(_secondAllele, secondResult.Pair.OtherAllele);
+            Assert.Equal(_firstAllele, secondResult.Genotype.DominantAllele);
+            Assert.Equal(_secondAllele, secondResult.Genotype.OtherAllele);
 
             var thirdResult = results.Last();
             Assert.Equal((float)1/(float)9, thirdResult.Ratio);
-            Assert.Equal(_secondAllele, thirdResult.Pair.DominantAllele);
-            Assert.Equal(_secondAllele, thirdResult.Pair.OtherAllele);
+            Assert.Equal(_secondAllele, thirdResult.Genotype.DominantAllele);
+            Assert.Equal(_secondAllele, thirdResult.Genotype.OtherAllele);
         } // end method
 
         [Fact]
@@ -76,18 +76,18 @@ namespace Bolay.Genetics.Core.Tests.PunnetSquares
             Assert.Equal(3, results.Count());
             var firstResult = results.First();
             Assert.Equal(.25, firstResult.Ratio);
-            Assert.Equal(_firstAllele, firstResult.Pair.DominantAllele);
-            Assert.Equal(_firstAllele, firstResult.Pair.OtherAllele);
+            Assert.Equal(_firstAllele, firstResult.Genotype.DominantAllele);
+            Assert.Equal(_firstAllele, firstResult.Genotype.OtherAllele);
 
             var secondResult = results.ElementAt(1);
             Assert.Equal(.5, secondResult.Ratio);
-            Assert.Equal(_firstAllele, secondResult.Pair.DominantAllele);
-            Assert.Equal(_secondAllele, secondResult.Pair.OtherAllele);
+            Assert.Equal(_firstAllele, secondResult.Genotype.DominantAllele);
+            Assert.Equal(_secondAllele, secondResult.Genotype.OtherAllele);
 
             var thirdResult = results.Last();
             Assert.Equal(.25, thirdResult.Ratio);
-            Assert.Equal(_secondAllele, thirdResult.Pair.DominantAllele);
-            Assert.Equal(_secondAllele, thirdResult.Pair.OtherAllele);
+            Assert.Equal(_secondAllele, thirdResult.Genotype.DominantAllele);
+            Assert.Equal(_secondAllele, thirdResult.Genotype.OtherAllele);
         } // end method
     } // end class
 } // end namespace

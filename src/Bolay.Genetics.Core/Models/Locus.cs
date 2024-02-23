@@ -7,6 +7,11 @@ namespace Bolay.Genetics.Core.Models
     public class Locus
     {
         /// <summary>
+        /// Gets or sets the locus.
+        /// </summary>
+        public Guid Id { get; set; }
+        
+        /// <summary>
         /// Gets or sets the name of the gene.
         /// </summary>
         public string Name { get; set; }

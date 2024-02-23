@@ -1,6 +1,6 @@
 using Bolay.Genetics.Core.Models;
 
-namespace Bolay.Genetics.Core.Tests.PunnetSquares
+namespace Bolay.Genetics.Core.Tests.Heredity
 {
     public class TestLocus : Locus
     {
@@ -29,6 +29,17 @@ namespace Bolay.Genetics.Core.Tests.PunnetSquares
         {
             this.Ordinal = 1;
             this.Name = "Second";
+            this.Symbol = "a(t)";
+            this.Dominance = DominanceEnum.Dominant;
+        } // end method
+    } // end class
+
+    public class ThirdAllele : Allele<TestLocus>
+    {
+        public ThirdAllele()
+        {
+            this.Ordinal = 2;
+            this.Name = "Third";
             this.Symbol = "a";
             this.Dominance = DominanceEnum.Recessive;
         } // end method
