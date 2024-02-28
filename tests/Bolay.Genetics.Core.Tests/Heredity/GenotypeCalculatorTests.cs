@@ -1,6 +1,7 @@
 using Bolay.Genetics.Core.Heredity;
 using Bolay.Genetics.Core.Heredity.Interfaces;
 using Bolay.Genetics.Core.Models;
+using Bolay.Genetics.Core.TestData;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
@@ -9,10 +10,10 @@ namespace Bolay.Genetics.Core.Tests.Heredity
 {
     public class GenotypeCalculatorTests
     {
-        private Mock<IAlleleRepository<TestLocus, Allele<TestLocus>>> _alleleRepo;
-        private Mock<IGenotypeRepository<TestLocus, Guid>> _genotypeRepo;
-        private Mock<ILogger<GenotypeCalculator<TestLocus, Allele<TestLocus>, Guid>>> _logger;
-        private GenotypeCalculator<TestLocus, Allele<TestLocus>, Guid> _calculator;
+        private Mock<IGenotypeRepository<TestAllele, TestLocus, Guid>> _genotypeRepo;
+        private Mock<ILogger<GenotypeCalculator<TestAllele, TestLocus, Guid>>> _logger;
+        private Mock<ILogger<PunnetSquare<TestAllele, TestLocus>>> _punnetLogger;
+        private GenotypeCalculator<TestAllele, TestLocus, Guid> _calculator;
 
         private FirstAllele _firstAllele = new FirstAllele();
         private SecondAllele _secondAllele = new SecondAllele();
@@ -20,68 +21,59 @@ namespace Bolay.Genetics.Core.Tests.Heredity
 
         public GenotypeCalculatorTests()
         {
-            _alleleRepo = new Mock<IAlleleRepository<TestLocus, Allele<TestLocus>>>();
-            _genotypeRepo = new Mock<IGenotypeRepository<TestLocus, Guid>>();
-            _logger = new Mock<ILogger<GenotypeCalculator<TestLocus, Allele<TestLocus>, Guid>>>();
-            _calculator = new GenotypeCalculator<TestLocus, Allele<TestLocus>, Guid>(
+            _genotypeRepo = new Mock<IGenotypeRepository<TestAllele, TestLocus, Guid>>();
+            _logger = new Mock<ILogger<GenotypeCalculator<TestAllele, TestLocus, Guid>>>();
+            _punnetLogger = new Mock<ILogger<PunnetSquare<TestAllele, TestLocus>>>();
+            _calculator = new GenotypeCalculator<TestAllele, TestLocus, Guid>(
                 _genotypeRepo.Object,
-                _alleleRepo.Object, 
-                new PunnetSquare<TestLocus, Guid>(),
+                new PunnetSquare<TestAllele, TestLocus>(_punnetLogger.Object),
                 _logger.Object
             );
-
-            _alleleRepo.Setup(x => x.GetAsync(It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new List<Allele<TestLocus>>() 
-                {
-                    _firstAllele,
-                    _secondAllele,
-                    _thirdAllele
-                });
         } // end method
 
         [Fact]
         public async Task Where_Did_Tan_Come_From()
         {
-            var individual = new IndividualGenotype<TestLocus>()
+            var individual = new IndividualGenotype<TestAllele, TestLocus>()
             {
                 Id = Guid.NewGuid(),
-                Genotype = new Genotype<TestLocus>()
+                Genotype = new Genotype<TestAllele, TestLocus>()
             };
 
-            var otherParent = new IndividualGenotype<TestLocus>()
+            var otherParent = new IndividualGenotype<TestAllele, TestLocus>()
             {
                 Id = Guid.NewGuid(),
-                Genotype = new Genotype<TestLocus>()
+                Genotype = new Genotype<TestAllele, TestLocus>()
                 {
                     DominantAllele = _firstAllele
                 }
             };
 
-            var offspring = new List<IndividualGenotype<TestLocus>>()
+            var offspring = new List<IndividualGenotype<TestAllele, TestLocus>>()
             {
-                new IndividualGenotype<TestLocus>()
+                new IndividualGenotype<TestAllele, TestLocus>()
                 {
                     PaternalId = individual.Id,
                     MaternalId = otherParent.Id,
-                    Genotype = new Genotype<TestLocus>()
+                    Genotype = new Genotype<TestAllele, TestLocus>()
                     {
                         DominantAllele = _firstAllele
                     }
                 },
-                new IndividualGenotype<TestLocus>()
+                new IndividualGenotype<TestAllele, TestLocus>()
                 {
                     PaternalId = individual.Id,
                     MaternalId = otherParent.Id,
-                    Genotype = new Genotype<TestLocus>()
+                    Genotype = new Genotype<TestAllele, TestLocus>()
                     {
                         DominantAllele = _secondAllele
                     }
                 },
-                new IndividualGenotype<TestLocus>()
+                new IndividualGenotype<TestAllele, TestLocus>()
                 {
                     PaternalId = individual.Id,
                     MaternalId = otherParent.Id,
-                    Genotype = new Genotype<TestLocus>()
+                    Genotype = new Genotype<TestAllele, TestLocus>()
                     {
                         DominantAllele = _thirdAllele
                     }
@@ -100,6 +92,7 @@ namespace Bolay.Genetics.Core.Tests.Heredity
             Assert.NotNull(result);
             Assert.NotEmpty(result);
             Assert.Equal(1, result.Count());
+            Assert.Equal("a(t)/a", result.First().ToString());
         } // end method
     } // end class
 } // end namespace

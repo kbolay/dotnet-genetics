@@ -1,52 +1,85 @@
+using System.Text;
+
 namespace Bolay.Genetics.Core.Models
 {
     /// <summary>
     /// A pair of alleles located at a specific locus.
     /// </summary>
     /// <typeparam name="TLocus"></typeparam>
-    public class Genotype<TLocus>
-        where TLocus : Locus, new()
+    public class Genotype<TAllele, TLocus>
+        where TAllele : Allele
+        where TLocus : Locus<TAllele>, new()
     {
         /// <summary>
         /// Gets or sets the more dominant allele.
         /// </summary>
-        public Allele<TLocus>? DominantAllele { get; set; }
+        public TAllele? DominantAllele { get; set; }
 
         /// <summary>
         /// Gets or sets the less dominant allele. Can be the same as the first allele, different, or unknown.
         /// </summary>
-        public Allele<TLocus>? OtherAllele { get; set; }
+        public TAllele? OtherAllele { get; set; }
+
+        public bool? IsHomozygous 
+        { 
+            get 
+            { 
+                bool? result = null;
+
+                if(DominantAllele != null && OtherAllele != null)
+                {
+                    result = DominantAllele.Ordinal == OtherAllele.Ordinal;
+                } // end if
+
+                return result;
+            } // end get
+        }
 
         public Genotype() { } // end method
 
-        public Genotype(Allele<TLocus> dominantAllele, Allele<TLocus>? otherAllele)
+        public Genotype(TAllele firstAllele, TAllele? secondAllele = null)
         {
-            DominantAllele = dominantAllele ?? throw new ArgumentNullException(nameof(dominantAllele));
-            OtherAllele = otherAllele;
-
-            if(otherAllele != null && otherAllele.Ordinal < dominantAllele.Ordinal)
+            if(firstAllele == null)
             {
-                throw new ArgumentException("OtherAllele must be of equal or lower dominance.");
+                throw new ArgumentNullException(nameof(firstAllele));
+            } // end if
+
+            if(secondAllele == null || secondAllele.Ordinal >= firstAllele.Ordinal)
+            {
+                DominantAllele = firstAllele;
+                OtherAllele = secondAllele;
+            }
+            else
+            {
+                DominantAllele = secondAllele;
+                OtherAllele = firstAllele;
             } // end if
         } // end method
 
-        public override bool Equals(object? obj)
+        public override string ToString()
         {
-            var result = false;
-
-            if(obj != null && obj is Genotype<TLocus>)
+            var builder = new StringBuilder();
+            if(DominantAllele != null)
             {
-                var otherGenePair = (Genotype<TLocus>)obj;
-
-                if(otherGenePair != null
-                    && this.DominantAllele?.Ordinal == otherGenePair.DominantAllele?.Ordinal
-                    && this.OtherAllele?.Ordinal == otherGenePair.OtherAllele?.Ordinal)
-                {
-                    result = true;
-                } // end if
+                builder.Append(DominantAllele.ToString());
+            }
+            else
+            {
+                builder.Append("_");
             } // end if
 
-            return result;
+            builder.Append("/");
+
+            if(OtherAllele != null)
+            {
+                builder.Append(OtherAllele.ToString());
+            }
+            else
+            {
+                builder.Append("_");
+            } // end if
+
+            return builder.ToString();
         } // end method
     } // end class
 } // end namespace

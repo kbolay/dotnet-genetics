@@ -21,5 +21,11 @@ namespace Bolay.Genetics.Core.Heredity
         public TId? MaternalId { get; set; }
     } // end class
 
-    public class Individual : Individual<Guid> { } // end class
+    public class Individual : Individual<Guid> 
+    { 
+        public Individual()
+        {
+            Id = Guid.NewGuid();
+        } // end method
+    } // end class
 } // end namespace

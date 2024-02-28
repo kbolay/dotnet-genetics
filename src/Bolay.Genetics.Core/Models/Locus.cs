@@ -4,8 +4,14 @@ namespace Bolay.Genetics.Core.Models
     /// A physical location of a chromosone in which a gene, or its alleles, exists.
     /// 
     /// </summary>
-    public class Locus
+    public abstract class Locus<TAllele>
+        where TAllele : Allele
     {
+        /// <summary>
+        /// Gets the alleles of a locus.
+        /// </summary>
+        public abstract IEnumerable<TAllele> Alleles { get; }
+
         /// <summary>
         /// Gets or sets the locus.
         /// </summary>

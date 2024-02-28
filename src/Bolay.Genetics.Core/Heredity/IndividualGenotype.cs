@@ -2,13 +2,15 @@ using Bolay.Genetics.Core.Models;
 
 namespace Bolay.Genetics.Core.Heredity
 {
-    public class IndividualGenotype<TLocus, TId> : Individual<TId>
-        where TLocus : Locus, new()
+    public class IndividualGenotype<TAllele, TLocus, TId> : Individual<TId>
+        where TAllele : Allele
+        where TLocus : Locus<TAllele>, new()
     {
-        public Genotype<TLocus> Genotype { get; set; }
+        public Genotype<TAllele, TLocus> Genotype { get; set; }
     } // end class
 
-    public class IndividualGenotype<TLocus> : IndividualGenotype<TLocus, Guid> 
-        where TLocus : Locus, new()
+    public class IndividualGenotype<TAllele, TLocus> : IndividualGenotype<TAllele, TLocus, Guid>
+        where TAllele : Allele
+        where TLocus : Locus<TAllele>, new()
     {} // end class
 } // end namespace

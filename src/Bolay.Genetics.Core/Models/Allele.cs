@@ -1,17 +1,13 @@
+using System.Text;
+
 namespace Bolay.Genetics.Core.Models
 {
     /// <summary>
     /// An allele is a gene or the synonym of a gene that can fit in the same place on a chromosome.
     /// Different alleles can have different impacts on the phenotypes produced by this gene.
     /// </summary>
-    public class Allele<TLocus>
-        where TLocus : Locus, new()
+    public abstract class Allele
     {
-        /// <summary>
-        /// Gets or sets the locus on which the allele can exist.
-        /// </summary>
-        public TLocus Locus { get; set; } = new TLocus();
-
         /// <summary>
         /// Gets or sets ordinal value of this allele to be compared against the other alleles of the same gene locus.
         /// This is primarily for the purpose of dominance.
@@ -31,12 +27,12 @@ namespace Bolay.Genetics.Core.Models
         /// <summary>
         /// Gets or sets the genotype symbol. Often displayed in superscript. 
         /// </summary>
-        public string GenotypeSymbol { get; set; }
+        public string? GenotypeSymbol { get; set; }
 
         /// <summary>
         /// Gets or sets the phenotype symbol. Often displayed in subscript.
         /// </summary>
-        public string PhenotypeSymbol { get; set; }
+        public string? PhenotypeSymbol { get; set; }
 
         /// <summary>
         /// Gets or sets the dominance of this allele in relation to alleles with higher ordinal values.
@@ -52,5 +48,16 @@ namespace Bolay.Genetics.Core.Models
         /// Gets or sets the base pairs that make this allele.
         /// </summary>
         public IEnumerable<BasePair>? BasePairs { get; set; }
+
+        public override string ToString()
+        {
+            var result = Symbol;
+            if(!string.IsNullOrWhiteSpace(GenotypeSymbol))
+            {
+                result += $"({GenotypeSymbol})";
+            } // end if
+
+            return result;
+        } // end method
     } // end class
 } // end namespace

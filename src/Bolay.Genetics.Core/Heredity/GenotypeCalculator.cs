@@ -1,116 +1,74 @@
-using System.Security.Cryptography.X509Certificates;
+using Bolay.Genetics.Core.Extensions;
 using Bolay.Genetics.Core.Heredity.Interfaces;
 using Bolay.Genetics.Core.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Bolay.Genetics.Core.Heredity
 {
-    public class GenotypeCalculator<TLocus, TAllele, TId> : IGenotypeCalculator<TLocus, TId>
-        where TLocus : Locus, new()
-        where TAllele : Allele<TLocus>
+    public class GenotypeCalculator<TAllele, TLocus, TId> : IGenotypeCalculator<TAllele, TLocus, TId>
+        where TAllele : Allele
+        where TLocus : Locus<TAllele>, new()
+        where TId : IEquatable<TId>
     {
-        protected readonly IGenotypeRepository<TLocus, TId> _genotypeRepository;
-        protected readonly IAlleleRepository<TLocus, TAllele> _alleleRepository;
-        protected readonly PunnetSquare<TLocus, TId> _punnetSquare;
+        protected readonly IGenotypeRepository<TAllele, TLocus, TId> _genotypeRepository;
+        protected readonly IPunnetSquare<TAllele, TLocus> _punnetSquare;
         protected readonly ILogger _logger;
 
         public GenotypeCalculator(
-            IGenotypeRepository<TLocus, TId> genotypeRepository,
-            IAlleleRepository<TLocus, TAllele> alleleRepository,
-            PunnetSquare<TLocus, TId> punnetSquare,
-            ILogger<GenotypeCalculator<TLocus, TAllele, TId>> logger)
+            IGenotypeRepository<TAllele, TLocus, TId> genotypeRepository,
+            IPunnetSquare<TAllele, TLocus> punnetSquare,
+            ILogger<GenotypeCalculator<TAllele, TLocus, TId>> logger)
         {
             _genotypeRepository = genotypeRepository ?? throw new ArgumentNullException(nameof(genotypeRepository));
-            _alleleRepository = alleleRepository ?? throw new ArgumentNullException(nameof(alleleRepository));
-            _punnetSquare = punnetSquare ?? throw new ArgumentNullException(nameof(punnetSquare));
+            _punnetSquare = punnetSquare ?? throw new ArgumentNullException(nameof(punnetSquare));            
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         } // end method
 
-        public virtual async Task<IEnumerable<Genotype<TLocus>>> CalculateGenotypesAsync(TId individualId, CancellationToken token = default)
+        public virtual async Task<IEnumerable<Genotype<TAllele, TLocus>>> CalculateGenotypesAsync(TId individualId, CancellationToken token = default)
         {
-            var result = new List<Genotype<TLocus>>();
+            var result = new List<Genotype<TAllele, TLocus>>();
 
             var individualGenotype = await _genotypeRepository.GetAsync(individualId, token).ConfigureAwait(false);
-            var knownGenotype = individualGenotype.Genotype;
-
-            var locusAlleles = await _alleleRepository.GetAsync(token).ConfigureAwait(false);
-            var recessiveAllele = locusAlleles.OrderBy(x => x.Ordinal).Last();
-
-            if(knownGenotype.DominantAllele != null)
+            
+            if(individualGenotype.Genotype.DominantAllele == null 
+                || individualGenotype.Genotype.OtherAllele == null)
             {
-                if(knownGenotype.DominantAllele.Ordinal == recessiveAllele.Ordinal)
+                // first go from parents
+                var relevantGenotypesFromParents = await GetPotentialGenotypesFromParentsAsync(individualGenotype, token).ConfigureAwait(false);
+                var potentialGenotypes = relevantGenotypesFromParents.Select(x => x.Genotype);
+
+                if(potentialGenotypes.Count() > 1)
                 {
-                    result.Add(new Genotype<TLocus>()
-                    {
-                        DominantAllele = recessiveAllele,
-                        OtherAllele = recessiveAllele
-                    });
+                    // then go against children and the fellow parent of those children.
+                    var applicableGenotypesFromChildren = await GetApplicableGenotypesFromOffspringAsync(
+                            individualGenotype.Id, 
+                            potentialGenotypes,
+                            token)
+                        .ConfigureAwait(false);
+
+                    result = applicableGenotypesFromChildren.ToList();
                 }
                 else
                 {
-                    result = locusAlleles
-                        .Where(x => x.Ordinal >= knownGenotype.DominantAllele.Ordinal)
-                        .Select(allele => new Genotype<TLocus>()
-                        {
-                            DominantAllele = knownGenotype.DominantAllele,
-                            OtherAllele = allele
-                        })
-                        .ToList();
+                    result = potentialGenotypes.ToList();
                 } // end if
             }
             else
             {
-                result = locusAlleles.SelectMany(firstAllele => 
-                    locusAlleles.Where(secondAllele => firstAllele.Ordinal <= secondAllele.Ordinal)
-                        .Select(secondAllele => new Genotype<TLocus>()
-                        {
-                            DominantAllele = firstAllele,
-                            OtherAllele = secondAllele                            
-                        }))
-                    .ToList();
-            } // end if
-
-            // get the potential genotype ratios from the parents of this individual
-            var genotypeRatiosFromParents = await GetParentsGenotypeRatiosAsync(individualGenotype, token).ConfigureAwait(false);
-
-            // restrict my potential viable genotypes down to those from the parent.
-            if(genotypeRatiosFromParents != null && genotypeRatiosFromParents.Any())
-            {
-                result = result
-                    .Where(viableGenotype => 
-                        genotypeRatiosFromParents.Any(x => 
-                            x.Genotype.DominantAllele.Ordinal == viableGenotype.DominantAllele.Ordinal
-                            && x.Genotype.OtherAllele.Ordinal == viableGenotype.OtherAllele.Ordinal))
-                    .ToList();
-            } // end if
-
-            if(result.Count() > 1)
-            {
-                var childrenGenotypeRatios = await GetPotentialGenotypesFromOffspringAsync(individualGenotype, token).ConfigureAwait(false);
-
-                if(childrenGenotypeRatios != null && childrenGenotypeRatios.Any())
-                {
-                    result = result
-                        .Where(viableGenotype => childrenGenotypeRatios.Any(x => 
-                            viableGenotype.DominantAllele.Ordinal == x.DominantAllele.Ordinal
-                            && viableGenotype.OtherAllele.Ordinal == x.OtherAllele.Ordinal))
-                        .ToList();
-                } // end if
+                result.Add(individualGenotype.Genotype);
             } // end if
 
             return result;
         } // end method
-    
-        protected virtual async Task<IEnumerable<GenotypeRatio<TLocus>>> GetParentsGenotypeRatiosAsync(
-            Individual<TId> individual, 
+
+        protected virtual async Task<IEnumerable<GenotypeRatio<TAllele, TLocus>>> GetPotentialGenotypesFromParentsAsync(
+            IndividualGenotype<TAllele, TLocus, TId> individual, 
             CancellationToken token = default)
         {
-            var availableAlleles = await _alleleRepository.GetAsync(token).ConfigureAwait(false);
-
-            var paternalGenotype = new Genotype<TLocus>();
-            var materalGenotype = new Genotype<TLocus>();
+            var paternalGenotype = new Genotype<TAllele, TLocus>();
+            var materalGenotype = new Genotype<TAllele, TLocus>();
             
-            if(individual.PaternalId != null)
+            if(!individual.PaternalId.Equals(default(TId?)))
             {
                 var father = await _genotypeRepository.GetAsync(individual.PaternalId, token).ConfigureAwait(false);
                 if(father != null)
@@ -119,7 +77,7 @@ namespace Bolay.Genetics.Core.Heredity
                 } // end if
             } // end if
             
-            if(individual.MaternalId != null)
+            if(!individual.MaternalId.Equals(default(TId?)))
             {
                 var mother = await _genotypeRepository.GetAsync(individual.MaternalId, token).ConfigureAwait(false);
                 if(mother != null)
@@ -128,101 +86,98 @@ namespace Bolay.Genetics.Core.Heredity
                 } // end if
             } // end if
 
-            return _punnetSquare.GetOffsprinGenotypes(paternalGenotype, materalGenotype, availableAlleles.ToArray());
+            var results = _punnetSquare.GetOffsprinGenotypes(paternalGenotype, materalGenotype);
+            if(individual.Genotype.DominantAllele != null)
+            {
+                results = results.Where(x => x.Genotype.DominantAllele.Ordinal == individual.Genotype.DominantAllele.Ordinal);
+            } // end if
+
+            return results;
         } // end method
     
-        protected virtual async Task<IEnumerable<Genotype<TLocus>>> GetPotentialGenotypesFromOffspringAsync(
-            IndividualGenotype<TLocus, TId> individual,
+        protected virtual async Task<IEnumerable<Genotype<TAllele, TLocus>>> GetApplicableGenotypesFromOffspringAsync(
+            TId individualId,
+            IEnumerable<Genotype<TAllele, TLocus>> potentialGenotypes,
             CancellationToken token = default)
         {
-            var result = new List<Genotype<TLocus>>();
-
-            var locusAlleles = await _alleleRepository.GetAsync(token).ConfigureAwait(false);
-
+            var result = potentialGenotypes.ToList();
             // Get all the offspring of the individual
-            var allOffspring = await _genotypeRepository.GetOffspringAsync(individual.Id, token).ConfigureAwait(false);
+            var allOffspring = await _genotypeRepository.GetOffspringAsync(individualId, token).ConfigureAwait(false);
 
             // are there any offspring?
             if(allOffspring != null && allOffspring.Any())
             {
                 // group the offspring by both parents
-                var offspringParentGroups = allOffspring
-                    .Where(x => x.MaternalId != null && x.PaternalId != null) // not sure if this is necessary
+                var siblingGroups = allOffspring
                     .GroupBy(x => new { PaternalId = x.PaternalId, MaternalId = x.MaternalId });
 
-                foreach(var offspringParentGroup in offspringParentGroups)
+                foreach(var siblings in siblingGroups)
                 {
-                    var potentialGenotypes = await BuildParentGenotypesFromSiblingSetsAsync(individual, offspringParentGroup, locusAlleles, token).ConfigureAwait(false);
-                    result.AddRange(potentialGenotypes);                    
+                    var expressedGenotypes = siblings
+                        .Where(x => x.Genotype.DominantAllele != null)
+                        .GroupBy(x => x.Genotype.ToString())
+                        .Select(x => x.First().Genotype)
+                        .OrderBy(x => x.DominantAllele.Ordinal)
+                        .ToList();
+                    
+                    var otherParentId = siblings.Any(x => individualId.Equals(x.PaternalId)) ? siblings.First().MaternalId : siblings.First().PaternalId;
+                    IEnumerable<Genotype<TAllele, TLocus>> otherParentGenotypes = null;
+                    if(otherParentId != null)
+                    {
+                        var otherParent = await _genotypeRepository.GetAsync(otherParentId, token).ConfigureAwait(false);
+                        otherParentGenotypes = otherParent.Genotype.BuildPotentialGenotypes();
+                    }
+                    else
+                    {
+                        otherParentGenotypes = new Genotype<TAllele, TLocus>().BuildPotentialGenotypes();
+                    } // end if
+
+                    if(otherParentGenotypes.Count() > 1)
+                    {
+                        // restrict the other parent genotypes to ones that could actually help produce the expressed genotypes
+                        otherParentGenotypes = RefinePotentialGenotypes(expressedGenotypes, otherParentGenotypes, result);
+                    } // end if
+
+                    var refinedPotentialGenotypes = RefinePotentialGenotypes(expressedGenotypes, result, otherParentGenotypes);
+
+                    result = refinedPotentialGenotypes.ToList();
                 } // end foreach
             } // end if
-
-            return result
-                .GroupBy(x => new { DominantOrdinal = x.DominantAllele.Ordinal, OtherOrdinal = x.OtherAllele?.Ordinal })
-                .Select(x => x.First())
-                .ToList();
+            
+            return result;
         } // end method
 
-        protected async Task<IEnumerable<Genotype<TLocus>>> BuildParentGenotypesFromSiblingSetsAsync(
-            IndividualGenotype<TLocus, TId>? individual,
-            IEnumerable<IndividualGenotype<TLocus, TId>> siblings,
-            IEnumerable<TAllele> locusAlleles,
-            CancellationToken token = default)
+        protected virtual IEnumerable<Genotype<TAllele, TLocus>> RefinePotentialGenotypes(
+            IEnumerable<Genotype<TAllele, TLocus>> expressedGenotypes,
+            IEnumerable<Genotype<TAllele, TLocus>> parentGenotypes,
+            IEnumerable<Genotype<TAllele, TLocus>> otherParentGenotypes)
         {
-            var uniqueOffspringGenotypes = siblings
-                .Where(x => x.Genotype.DominantAllele != null)
-                .GroupBy(x => new { DominantOrdinal = x.Genotype.DominantAllele.Ordinal, OtherOrdinal = x.Genotype.OtherAllele?.Ordinal })
-                .Select(x => x.First().Genotype)
-                .OrderBy(x => x.DominantAllele.Ordinal)
-                .ToList();
+            var result = parentGenotypes.ToList();
 
-            var dominantGroups = uniqueOffspringGenotypes.GroupBy(x => x.DominantAllele.Ordinal);
-            var mostDominantOffspringAllele = uniqueOffspringGenotypes.First().DominantAllele;
-            var potentialDominantAlleles = locusAlleles.Where(x => x.Ordinal >= mostDominantOffspringAllele.Ordinal);
+            // build a dictionary of each potential genotype and the offspring genotypes it could generate with this other parent
+            var potentialGenotypeOffspring = result.ToDictionary(
+                // the potential genotypes
+                potentialGenotype => potentialGenotype, 
+                // the genotypes than can come from this potential genotype
+                potentialGenotype => otherParentGenotypes.SelectMany(otherParentGenotype => 
+                        _punnetSquare.GetOffsprinGenotypes(potentialGenotype, otherParentGenotype)
+                            .Select(x => x.Genotype)));
 
-            var leastDominantOffspringAllele = uniqueOffspringGenotypes.Last().DominantAllele;
-            var potentialOtherAlleles = locusAlleles.Where(x => x.Ordinal >= leastDominantOffspringAllele.Ordinal);
-
-            var recessiveAllele = locusAlleles.OrderBy(x => x.Ordinal).Last();
-            if(leastDominantOffspringAllele.Ordinal == recessiveAllele.Ordinal)
+            // now remove any potential genotypes that did not produce genotypes that explain all the expressions
+            foreach(var potentialGenotypeOffspringKvp in potentialGenotypeOffspring)
             {
-                potentialOtherAlleles = potentialDominantAlleles.Where(x => x.Ordinal == recessiveAllele.Ordinal);
-            } // end if        
-            
-            if(individual.Genotype.DominantAllele == null && dominantGroups.Count() > 2)                
-            {
-                var otherParentId = siblings.Any(x => individual.Id.Equals(x.PaternalId)) ? siblings.First().MaternalId : siblings.First().PaternalId;
-                var otherParent = await _genotypeRepository.GetAsync(otherParentId, token).ConfigureAwait(false);
+                var allExpressedGenotypesRepresented = expressedGenotypes.All(expressedGenotype => 
+                    potentialGenotypeOffspringKvp.Value.Any(genotype => 
+                        genotype.DominantAllele.Ordinal == expressedGenotype.DominantAllele.Ordinal
+                        && (expressedGenotype.OtherAllele == null || genotype.OtherAllele.Ordinal == expressedGenotype.OtherAllele.Ordinal)));
 
-                if(otherParent.Genotype.DominantAllele != null)
+                if(!allExpressedGenotypesRepresented)
                 {
-                    var secondDominantAllele = dominantGroups.Skip(1).First().First().DominantAllele;
-                    if(otherParent.Genotype.DominantAllele.Ordinal == mostDominantOffspringAllele.Ordinal)
-                    {
-                        // the most dominant allele comes from the individual we are trying to figure out                        
-                        potentialDominantAlleles = potentialDominantAlleles.Where(x => x.Ordinal == secondDominantAllele.Ordinal);
-                        potentialOtherAlleles = potentialOtherAlleles.Where(x => x.Ordinal > secondDominantAllele.Ordinal);
-                    }
-                    else if (otherParent.Genotype.DominantAllele.Ordinal == secondDominantAllele.Ordinal)
-                    {
-                        potentialDominantAlleles = potentialDominantAlleles.Where(x => x.Ordinal == mostDominantOffspringAllele.Ordinal);
-                        potentialOtherAlleles = potentialDominantAlleles.Where(x => x.Ordinal >= leastDominantOffspringAllele.Ordinal);
-                    } // end if                    
+                    result.Remove(potentialGenotypeOffspringKvp.Key);
                 } // end if
-            }
-            else if(individual.Genotype.DominantAllele.Ordinal >= leastDominantOffspringAllele.Ordinal)
-            {                
-                potentialDominantAlleles = potentialDominantAlleles.Where(x => x.Ordinal >= individual.Genotype.DominantAllele.Ordinal);
-                potentialOtherAlleles = potentialOtherAlleles.Where(x => x.Ordinal >= individual.Genotype.DominantAllele.Ordinal);
-            } // end if                      
+            } // end foreach
 
-            return potentialDominantAlleles
-                .SelectMany(dominant => 
-                    potentialOtherAlleles.Select(other => new Genotype<TLocus>()
-                    {
-                        DominantAllele = dominant,
-                        OtherAllele = other
-                    }));
+            return result;
         } // end method
     } // end class
 } // end namespace

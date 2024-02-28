@@ -1,22 +1,32 @@
-using System.Runtime.CompilerServices;
+using Bolay.Genetics.Core.Extensions;
+using Bolay.Genetics.Core.Heredity.Interfaces;
 using Bolay.Genetics.Core.Models;
+using Microsoft.Extensions.Logging;
 
 namespace Bolay.Genetics.Core.Heredity
-{    
-    public class PunnetSquare<TLocus, TId>
-        where TLocus : Locus, new()
+{
+    public class PunnetSquare<TAllele, TLocus> : IPunnetSquare<TAllele, TLocus>
+        where TAllele : Allele
+        where TLocus : Locus<TAllele>, new()
     {
-        public IEnumerable<GenotypeRatio<TLocus>> GetOffsprinGenotypes(
-            Genotype<TLocus> paternalGenotype, 
-            Genotype<TLocus> maternalGenotype, 
-            params Allele<TLocus>[] locusAlleles)
+        protected static readonly TLocus _locus = new TLocus();
+        protected readonly ILogger _logger;
+
+        public PunnetSquare(ILogger<PunnetSquare<TAllele, TLocus>> logger)
         {
-            var paternalAlleleSets = BuildAlleleSets(paternalGenotype, locusAlleles);
-            var maternalAlleleSets = BuildAlleleSets(maternalGenotype, locusAlleles);
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        } // end method
 
-            var potentialOffspringGenotypes = CombineAlleleSets(paternalAlleleSets, maternalAlleleSets);
+        public virtual IEnumerable<GenotypeRatio<TAllele, TLocus>> GetOffsprinGenotypes(
+            Genotype<TAllele, TLocus> paternalGenotype, 
+            Genotype<TAllele, TLocus> maternalGenotype)
+        {
+            var paternalAlleles = BuildAlleleSets(paternalGenotype);
+            var maternalAlleles = BuildAlleleSets(maternalGenotype);
 
-            var genotypeRatios = BuildGenotypeRatios(potentialOffspringGenotypes);
+            var potentials = CombineAlleleSets(paternalAlleles, maternalAlleles);            
+
+            var genotypeRatios = BuildGenotypeRatios(potentials);
 
             return genotypeRatios;
         } // end method
@@ -25,64 +35,47 @@ namespace Bolay.Genetics.Core.Heredity
         /// Build the potential alleles of a given genotype.
         /// If one of the genes is unknown then a genotype is created for each equal or higher ordinal (lower dominance) allele.
         /// </summary>
-        /// <param name="parentGenotype"></param>
-        /// <param name="locusAlleles"></param>
+        /// <param name="potentialGenotypes"></param>
         /// <returns></returns>
-        protected IEnumerable<IEnumerable<Allele<TLocus>>> BuildAlleleSets(Genotype<TLocus> parentGenotype, params Allele<TLocus>[] locusAlleles)
+        protected Dictionary<TAllele, List<TAllele>> BuildAlleleSets(Genotype<TAllele, TLocus> genoType)
         {
-            var result = new List<List<Allele<TLocus>>>();
-            var firstAlleles = new List<Allele<TLocus>>();
-            if(parentGenotype.DominantAllele != null)
-            {
-                firstAlleles.Add(parentGenotype.DominantAllele);
-            }
-            else
-            {
-                firstAlleles.AddRange(locusAlleles);
-            } // end if
-
-            result.Add(firstAlleles);
-
-            var secondAlleles = new List<Allele<TLocus>>();
-            if(parentGenotype.OtherAllele != null)
-            {
-                secondAlleles.Add(parentGenotype.OtherAllele);
-            }
-            else
-            {
-                if(parentGenotype.DominantAllele != null)
-                {
-                    secondAlleles.AddRange(locusAlleles.Where(x => x.Ordinal >= parentGenotype.DominantAllele.Ordinal));
-                } 
-                else
-                {
-                    secondAlleles.AddRange(locusAlleles);
-                } // end if
-            } // end if
-            result.Add(secondAlleles);
-
-            return result;
-        } // end method
+            var potentialGenotypes = genoType.BuildPotentialGenotypes();
+            return potentialGenotypes
+                .GroupBy(x => x.DominantAllele.Ordinal)
+                .ToDictionary(group => 
+                    group.First().DominantAllele, 
+                    group => group.Select(genotype => genotype.OtherAllele).ToList());     
+        } // end method        
 
         /// <summary>
         /// Run punnet square (cross join) for each set of genotypes of each parent.
         /// </summary>
-        /// <param name="paternalSets"></param>
-        /// <param name="maternalSets"></param>
+        /// <param name="paternalAlleles"></param>
+        /// <param name="maternalAlleles"></param>
         /// <returns></returns>
-        protected IEnumerable<Genotype<TLocus>> CombineAlleleSets(
-            IEnumerable<IEnumerable<Allele<TLocus>>> paternalSets, 
-            IEnumerable<IEnumerable<Allele<TLocus>>> maternalSets)
+        protected IEnumerable<Genotype<TAllele, TLocus>> CombineAlleleSets(
+            Dictionary<TAllele, List<TAllele>> paternalAlleles, 
+            Dictionary<TAllele, List<TAllele>> maternalAlleles)
         {
-            return paternalSets.SelectMany(paternalAlleleSet => 
-                    maternalSets.SelectMany(maternalAlleleSet => 
-                        paternalAlleleSet.SelectMany(paternalAllele => 
-                            maternalAlleleSet.Select(maternalAllele => new Genotype<TLocus>()
-                                {
-                                    DominantAllele = paternalAllele.Ordinal <= maternalAllele.Ordinal ? paternalAllele : maternalAllele,
-                                    OtherAllele = paternalAllele.Ordinal <= maternalAllele.Ordinal ? maternalAllele : paternalAllele
-                                }))))
-                    .ToList();
+            var results = new List<Genotype<TAllele, TLocus>>();
+            foreach(var paternalKvp in paternalAlleles)
+            {
+                foreach(var paternalOther in paternalKvp.Value)
+                {
+                    foreach(var maternalKvp in maternalAlleles)
+                    {
+                        foreach(var maternalOther in maternalKvp.Value)
+                        {
+                            results.Add(new Genotype<TAllele, TLocus>(paternalKvp.Key, maternalKvp.Key));
+                            results.Add(new Genotype<TAllele, TLocus>(paternalOther, maternalKvp.Key));
+                            results.Add(new Genotype<TAllele, TLocus>(maternalOther, paternalKvp.Key));
+                            results.Add(new Genotype<TAllele, TLocus>(maternalOther, paternalOther));
+                        } // end foreach
+                    } // end foreach         
+                } // end foreach                
+            } // end foreach
+
+            return results;
         } // end method
 
         /// <summary>
@@ -90,11 +83,11 @@ namespace Bolay.Genetics.Core.Heredity
         /// </summary>
         /// <param name="genotypes"></param>
         /// <returns></returns>
-        protected IEnumerable<GenotypeRatio<TLocus>> BuildGenotypeRatios(IEnumerable<Genotype<TLocus>> genotypes)
+        protected IEnumerable<GenotypeRatio<TAllele, TLocus>> BuildGenotypeRatios(IEnumerable<Genotype<TAllele, TLocus>> genotypes)
         {
             return genotypes
-                .GroupBy(x => new { DominantOrdinal = x.DominantAllele?.Ordinal, OtherOrdinal = x.OtherAllele?.Ordinal})
-                .Select(x => new GenotypeRatio<TLocus>() 
+                .GroupBy(x => x.ToString())
+                .Select(x => new GenotypeRatio<TAllele, TLocus>() 
                     { 
                         Genotype = x.First(),
                         Ratio = (float)x.Count() / (float)genotypes.Count()
